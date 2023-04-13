@@ -3,9 +3,9 @@ This folder contains deisgns, modeles and conceptes.
 Please follow this structure:
 
 designs/\
-&emsp;modeles/\
-&emsp;concepts/\
-&emsp;sketches/\
+&emsp;modeles/ \
+&emsp;concepts/ \
+&emsp;sketches/
 
   
 - Concepts folder contains: Blender files or .png
