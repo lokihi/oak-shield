@@ -4,8 +4,8 @@ Please follow this structure:
 
 hardware/\
 &emsp;controller/ \
-&emsp;&emspv;v1/ \
-&emsp;&emspv;v2/ \
+&emsp;&emsp;v1/ \
+&emsp;&emsp;v2/ \
 &emsp;drivers/ \
 &emsp;components.md
 
