@@ -2,10 +2,10 @@ This folder contains deisgns, modeles and conceptes.
 
 Please follow this structure:
 
-designs/
-&emsp;modeles/
-&emsp;concepts/
-&emsp;sketches/
+designs/\
+&emsp;modeles/\
+&emsp;concepts/\
+&emsp;sketches/\
 
   
 - Concepts folder contains: Blender files or .png
