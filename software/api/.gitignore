@@ -1,0 +1,6 @@
+.dockerignore
+*.pem
+package-lock.json
+*.py
+docker-compose.yml
+node_modules
