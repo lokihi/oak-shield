@@ -1,4 +1,6 @@
 const Event = require('../models/events');
+const { Op } = require('sequelize')
+const moment = require('moment')
 
 exports.getAll = async (req, res, next) => {
     try {
@@ -11,20 +13,25 @@ exports.getAll = async (req, res, next) => {
 }
 
 exports.getOne = async (req, res, next) => {
-    var today = new Date();
-    var date = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate();
-    var time = today.getHours() + ":" + today.getMinutes() + ":" + today.getSeconds();
-    var dateTime = date + ' ' + time;
+    var today = moment().toDate()
     try {
-        const event = await Event.findOne({ where: { cardtag: req.params.cardtag, eventbegin: { [Event.lt]: dateTime } }, eventend: { [Event.gt]: dateTime } });
+        const event = await Event.findOne({
+            where:
+            {
+                cardtag: req.params.cardtag,
+                eventbegin: { [Op.lt]: today },
+                eventend: { [Op.gt]: today }
+            }
+        });
         if (event !== null) {
-            return res.status(200).json({ 'status': true, 'firstname': event.firstname, 'lastname': event.lastname, 'time': dateTime });
+            return res.status(200).json({ 'status': true, 'time': today });
         }
         else {
-            return res.status(200).json({ 'status': false, 'time': dateTime });
+            return res.status(400).json({ 'status': false, 'time': today });
         }
     }
     catch (error) {
+        console.log(error)
         return res.status(500).json(error);
     }
 }
