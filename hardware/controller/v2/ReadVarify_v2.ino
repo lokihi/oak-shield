@@ -3,12 +3,19 @@
 */
 
 #include <Wire.h>
-#include <Servo.h> 
+#include <Servo.h> // -> <SmoothServo.h>
 #include "MFRC522_I2C.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <Arduino_JSON.h>
+
+// LED strip
+#define NUM_LEDS 12
+#include "FastLED.h"
+#define PIN 5 // attaching to D1
+CRGB leds[NUM_LEDS];
+
 
 // I2C communication
 #define SDA_PIN D5
@@ -33,7 +40,7 @@ bool isRegistered;
 // WiFi settings and Server URL
 const char* ssid = "mipt-welcome"; 
 const char* password = "";
-String serverName = "http://10.55.139.35:3001/events/";
+String serverName = "http://10.55.138.57:3001/events/";
 
 // Server URL path with parameters
 String URLwParam;
@@ -59,14 +66,20 @@ void setup() {
 	Wire.begin(SDA_PIN, SCL_PIN);       // Initialize I2C	
   mfrc522.PCD_Init();		              // Init MFRC522	
 
-  servo.attach(2, 500, 2400);         // attaching to D4 pin
+  servo.attach(13, 500, 2400);         // attaching to D7 pin
   servo.write(DOOR_LOCKED); 
 
   // Init MFRC522
 	mfrc522.PCD_Init();		              
   Serial.println("Ready for reading UIDs");
 
+  // Init sensor
   pinMode(SENSOR_PIN, INPUT);  
+
+  // Init LED strip
+  FastLED.addLeds<WS2811, PIN, GRB>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.setBrightness(50);
+  pinMode(13, OUTPUT);
 }
 
 
@@ -138,7 +151,7 @@ void loop() {
       Serial.print("Current time:");
       Serial.println(responseArr[3]); 
       
-      openDoor(timerDelay);
+      openDoorLED();
       } else {
       for (int i = 0; i < keys.length(); i++) {
         JSONVar value = ParsedResponse[keys[i]];
@@ -148,8 +161,54 @@ void loop() {
       Serial.println("   Access Denied   ");
       Serial.print("Current time:");
       Serial.println(responseArr[1]); 
+      DoorClosed();
       }
     } 
+}
+
+void PositiveLED(){
+  for(int i = 0; i< NUM_LEDS; i++){
+    for(int j = 1; j<255;){
+      leds[i] = CHSV(85, 255, j);
+      FastLED.show();
+      j += 10;
+    }
+  }
+
+  for(int i = NUM_LEDS - 1; i >= 0;){
+    delay(700);
+
+    for(int j = 255; j>0;){
+      leds[i] = CHSV(85, 255, j);
+      leds[i-1] = CHSV(85, 255, j);
+      FastLED.show();
+      j -= 4;
+    }
+    
+    leds[i] = CHSV(85, 255, 0);
+    leds[i-1] = CHSV(85, 255, 0);
+
+    i -= 2;
+  }
+  FastLED.show();
+}
+
+void DoorClosed() {
+  for(int counter = 0; counter < 3; counter++){
+    for(int i = 0; i < NUM_LEDS; i++){
+      leds[i] = CHSV(0, 255, 255);
+      FastLED.show();
+    }
+
+    delay(200);
+
+    for(int i = 0; i < NUM_LEDS; i++){
+      leds[i] = CHSV(0, 0, 0);
+      FastLED.show();
+    }
+
+    delay(300);
+  }
 }
 
 void openDoor(unsigned long tmr) {
@@ -184,3 +243,10 @@ String httpGETRequest(const char* serverName) {
 
   return payload;
 }
+
+void openDoorLED() {
+  servo.write(DOOR_OPENED);
+  PositiveLED();
+  servo.write(DOOR_LOCKED);
+}
+
