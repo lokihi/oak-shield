@@ -1,14 +1,13 @@
-/*
-  I2C VERSION
-*/
-
 #include <Wire.h>
-#include <Servo.h> // -> <SmoothServo.h>
+#include <Servo.h> 
 #include "MFRC522_I2C.h"
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+#include <ESP8266WebServer.h>
 #include <WiFiClient.h>
 #include <Arduino_JSON.h>
+#include <Preferences.h>
+
 
 // LED strip
 #define NUM_LEDS 12
@@ -25,9 +24,26 @@ CRGB leds[NUM_LEDS];
 // Touch Sensor
 #define SENSOR_PIN 4
 
-// Servo angles
-#define DOOR_LOCKED 10
-#define DOOR_OPENED 170
+// Servo velocities
+#define DOOR_LOCKED 75
+#define DOOR_OPENED 105
+
+Preferences preferences;
+
+// ESP's ssid & password
+const char* ssid_esp = "NodeMCU"; 
+const char* password_esp = "12345678";
+
+// NodeMCU WebServer configuration
+IPAddress local_ip(192,168,1,1);
+IPAddress gateway(192,168,1,1);
+IPAddress subnet(255,255,255,0);
+ESP8266WebServer server(80);
+
+// WiFi settings and Server IP from initial setup
+String ssid;
+String password;
+String serverIP;
 
 
 MFRC522 mfrc522(0x28, RST_PIN);	   // Create MFRC522 instance.
@@ -37,20 +53,45 @@ Servo servo;                       // Creating Servo instance
 String response; 
 bool isRegistered; 
 
-// WiFi settings and Server URL
-const char* ssid = "mipt-welcome"; 
-const char* password = "";
-String serverName = "http://10.55.138.57:3001/events/";
-
 // Server URL path with parameters
 String URLwParam;
 
-// unsigned long lastTime = 0; // Add later
-unsigned long timerDelay = 2000;
-
 
 void setup() {
-	Serial.begin(9600); 
+  Serial.begin(9600); 
+
+  // Init sensor
+  pinMode(SENSOR_PIN, INPUT); 
+
+  // Init LED strip
+  FastLED.addLeds<WS2811, PIN, GRB>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.setBrightness(50);
+  pinMode(13, OUTPUT);
+
+  preferences.begin("wifi-configuration", false);
+
+  ssid = preferences.getString("name", "");
+  password = preferences.getString("password", "");
+  serverIP = preferences.getString("ip", "");
+
+
+  if (ssid == "") {
+    setupLED();
+    initial_setup();
+
+    Serial.println(ssid);
+    Serial.println(password);
+    Serial.println(serverIP);
+  } else {
+    if (digitalRead(SENSOR_PIN) == HIGH){
+      setupLED();
+      initial_setup();
+
+      Serial.println(ssid);
+      Serial.println(password);
+      Serial.println(serverIP);
+    }
+  }
 
   // WiFi connecting procedure
   WiFi.begin(ssid, password);
@@ -59,6 +100,8 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
+  wifiSetupLED();
+  delay(7000); 
   Serial.println("");
   Serial.print("Connected to WiFi network with IP Address: ");
   Serial.println(WiFi.localIP()); 
@@ -66,27 +109,20 @@ void setup() {
 	Wire.begin(SDA_PIN, SCL_PIN);       // Initialize I2C	
   mfrc522.PCD_Init();		              // Init MFRC522	
 
-  servo.attach(13, 500, 2400);         // attaching to D7 pin
-  servo.write(DOOR_LOCKED); 
+  servo.attach(13);         // attaching to D7 pin
 
   // Init MFRC522
 	mfrc522.PCD_Init();		              
   Serial.println("Ready for reading UIDs");
 
-  // Init sensor
-  pinMode(SENSOR_PIN, INPUT);  
-
-  // Init LED strip
-  FastLED.addLeds<WS2811, PIN, GRB>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  FastLED.setBrightness(50);
-  pinMode(13, OUTPUT);
+  preferences.end();
 }
 
 
 void loop() {
   if(digitalRead(SENSOR_PIN) == HIGH) {
     Serial.println("Someone touched button!");
-    openDoor(timerDelay);
+    openDoorLED();
     return;
   }
 
@@ -119,7 +155,8 @@ void loop() {
   mfrc522.PICC_HaltA();
 
   if (WiFi.status()==WL_CONNECTED){
-    URLwParam = serverName + UID;
+    // URLwParam = serverName + UID;
+    URLwParam = "http://" + serverIP + "/events/" + UID;
     
     response = httpGETRequest(URLwParam.c_str());
     JSONVar ParsedResponse = JSON.parse(response);
@@ -166,6 +203,7 @@ void loop() {
     } 
 }
 
+// LED indication functions
 void PositiveLED(){
   for(int i = 0; i< NUM_LEDS; i++){
     for(int j = 1; j<255;){
@@ -211,12 +249,52 @@ void DoorClosed() {
   }
 }
 
-void openDoor(unsigned long tmr) {
-  servo.write(DOOR_OPENED);
-  delay(tmr);
-  servo.write(DOOR_LOCKED);
+void openDoorLED() {
+  servo.write(DOOR_OPENED); 
+  delay(300);
+  servo.write(90);
+
+  PositiveLED();
+
+  servo.write(DOOR_CLOSED);
+  delay(300);
 }
 
+void wifiSetupLED(){
+  for(int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CHSV(165, 255, 255); // blue color
+    FastLED.show();
+  }
+  
+  delay(200);
+
+  for(int i = 0; i < NUM_LEDS; i++){
+    leds[i] = CHSV(0, 0, 0);
+    FastLED.show();
+  }
+
+  delay(200);
+}
+
+void setupLED() {
+  for(int counter = 0; counter < 3; counter++){
+    for(int i = 0; i < NUM_LEDS; i++){
+      leds[i] = CHSV(165, 255, 255); // blue color
+      FastLED.show();
+    }
+
+    delay(200);
+
+    for(int i = 0; i < NUM_LEDS; i++){
+      leds[i] = CHSV(0, 0, 0);
+      FastLED.show();
+    }
+
+    delay(200);
+  }
+}
+
+// GET request function
 String httpGETRequest(const char* serverName) {
   WiFiClient client;
   HTTPClient http;
@@ -244,9 +322,59 @@ String httpGETRequest(const char* serverName) {
   return payload;
 }
 
-void openDoorLED() {
-  servo.write(DOOR_OPENED);
-  PositiveLED();
-  servo.write(DOOR_LOCKED);
+// Initial setup & ESP WebServer functions
+void initial_setup() {
+  WiFi.softAP(ssid_esp, password_esp);
+  WiFi.softAPConfig(local_ip, gateway, subnet);
+  delay(100);
+  server.on("/", HTTP_GET, handleRoot);        // Call the 'handleRoot' function when a client requests URI "/"
+  server.on("/login", HTTP_POST, handleLogin); // Call the 'handleLogin' function when a POST request is made to URI "/login"
+  server.onNotFound(handleNotFound);
+  server.begin();
+  Serial.println("HTTP server started");
+
+  while(true) {server.handleClient();}
+}
+
+ 
+void handleRoot() {
+  server.send(200, "text/html", SendHTML2());
+}
+
+void handleLogin() {
+  ssid = server.arg("ssid");
+  password = server.arg("password");
+  serverIP = server.arg("serverip");
+
+  preferences.putString("name", ssid);
+  preferences.putString("password", password);
+  preferences.putString("ip", serverIP);
+
+  server.send(200, "text/html", "<form <br>Authorization completed, restarting...></form>");
+  delay(1000);
+  ESP.restart();
+}
+
+void handleNotFound(){
+  server.send(404, "text/plain", "404: Not found"); // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
+}
+
+
+String SendHTML2() {
+  String ptr = "<!DOCTYPE html> <html>\n";
+  ptr += "<body>\n";
+
+  ptr += "<div style=\"margin: 0; position: absolute; top: 50%; bottom: 50%; transform: translate(-50%, -50%);\">";
+  ptr += "<form action=\"/login\" method=\"POST\">";
+  ptr += "<center><input style=\"height: 60px; width: 280px; font-size: 1.7em; text-align: center;\" type=\"text\" name=\"ssid\" required=\"required\" placeholder=\"WiFi Network\"></br></center>";
+  ptr += "<center><input style=\"height: 60px; width: 280px; font-size: 1.7em; text-align: center;\" type=\"text\" name=\"password\" required=\"required\" placeholder=\"Password\"></br></center>"; 
+  ptr += "<center><input style=\"height: 60px; width: 280px; font-size: 1.7em; text-align: center;\" type=\"text\" name=\"serverip\" required=\"required\" placeholder=\"Server IP\"></br></center>";
+  ptr += "<center><input style=\"position:relative; top:10px; color:white; border-radius: 15px; background-color: #395BBF; height: 70px; width: 100px; font-size: 1em; text-align: center;\" type=\"submit\" value=\"Authorize\"></center>";
+  
+  ptr += "</form>\n";
+  ptr += "</div>\n";
+  ptr += "</body>\n";
+  ptr += "</html>\n";
+  return ptr;
 }
 
